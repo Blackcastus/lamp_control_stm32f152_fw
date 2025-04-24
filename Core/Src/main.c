@@ -83,6 +83,27 @@ static int CompareData(const uint8_t *received_data, const uint8_t *valid_data);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/**
+ * Callback
+ */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+	UNUSED(GPIO_Pin);
+	mTemp_cnt++;
+    if (GPIO_Pin == B1_Pin)
+    { // Nút nhấn B1
+        mButton_Rfid_Pressed != mButton_Rfid_Pressed; // Cờ trạng thái nút nhấn B1
+    }
+    else if (GPIO_Pin == B2_Pin)
+    { // Nút nhấn B2
+//    	mStatus_Button_Sos != mStatus_Button_Sos;
+//    	mTemp_cnt++;
+//        mButton_Sos_Pressed = 1; // Cờ trạng thái nút nhấn B2
+    }
+    else
+    {
+//    	_NOP();
+    }
+}
 
 /* USER CODE END 0 */
 
@@ -140,8 +161,78 @@ int main(void)
    while (1) {
 	   BATERRY_CHARGER_PROCESS();
 	   DISPLAY_PROCESS();
-	   SOS_PROCESS();
-	   RFID_PROCESS();
+//	   SOS_PROCESS();
+//	   RFID_PROCESS();
+
+	   // Kiểm tra nút B1
+	   if (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) { // Kiểm tra nếu nút B1 được nhấn
+		   HAL_Delay(50); // Chống dội nút (Debounce)
+		   if (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) { // Xác nhận nút vẫn được nhấn
+			   static uint8_t led_b1_state = 0; // Trạng thái LED cho nút B1
+			   led_b1_state = !led_b1_state; // Đảo trạng thái LED
+			   HAL_GPIO_WritePin(GPIOC, COI_Pin, led_b1_state ? GPIO_PIN_SET : GPIO_PIN_RESET); // Điều khiển LED
+
+			   // Hiển thị trạng thái B1 lên OLED
+			   SH1106_GotoXY(5, 40); // Dòng thứ ba
+			   if (led_b1_state) {
+				   SH1106_Puts("SOS: ON", &Font_7x10, SH1106_COLOR_WHITE);
+			   } else {
+				   SH1106_Puts("SOS: OFF", &Font_7x10, SH1106_COLOR_WHITE);
+			   }
+//                   SH1106_UpdateScreen();
+
+			   // Chờ thả nút
+			   while (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET);
+		   }
+	   }
+
+	   // Quét RFID liên tục
+	   if (HAL_UART_Receive(&huart1, mRfidBuffer, 14, 100) == HAL_OK) { // Nhận dữ liệu RFID
+			  if (CompareData(mRfidBuffer, mValid_Uid)) {
+					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); // Bật LED
+					SH1106_GotoXY(5, 30); // Cập nhật dòng 3
+					SH1106_Puts("charger", &Font_7x10, SH1106_COLOR_WHITE);
+//         	            SH1106_UpdateScreen();
+			  }
+			  else
+			  {
+				 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET); // Tắt LED
+			}
+			   HAL_Delay(10);
+		  }
+
+	   // Kiểm tra nút B2 để bật/tắt nguồn RFID
+	   if (HAL_GPIO_ReadPin(B2_GPIO_Port, B2_Pin) == GPIO_PIN_RESET) { // Kiểm tra nếu nút B2 được nhấn
+		   HAL_Delay(50); // Chống dội nút (Debounce)
+		   if (HAL_GPIO_ReadPin(B2_GPIO_Port, B2_Pin) == GPIO_PIN_RESET) { // Xác nhận nút vẫn được nhấn
+			   static uint8_t rdm6300_state = 0; // Trạng thái nguồn RFID
+			   rdm6300_state = !rdm6300_state; // Đảo trạng thái nguồn
+			   HAL_GPIO_WritePin(GPIOC, RDM6300_Pin, rdm6300_state ? GPIO_PIN_SET : GPIO_PIN_RESET); // Điều khiển nguồn RFID
+
+			   // Hiển thị trạng thái bật/tắt nguồn RFID trên OLED
+			   SH1106_GotoXY(5, 30); // Dòng thứ ba
+			   if (rdm6300_state) {
+				   SH1106_Puts("RFID ON", &Font_7x10, SH1106_COLOR_WHITE);
+			   } else {
+				   SH1106_Puts("RFID OFF", &Font_7x10, SH1106_COLOR_WHITE);
+//                       is_charger_displayed = 0; // Xóa trạng thái hiển thị khi tắt nguồn RFID
+			   }
+//                   SH1106_UpdateScreen();
+
+			   // Chờ thả nút
+			   while (HAL_GPIO_ReadPin(B2_GPIO_Port, B2_Pin) == GPIO_PIN_RESET);
+		   }
+	   }
+
+	   // Cập nhật OLED
+	   SH1106_UpdateScreen();
+
+	   // Truyền dữ liệu qua UART để debug
+//           char uartBuffer[100];
+//           snprintf(uartBuffer, sizeof(uartBuffer), "Vbat: %d.%03d V, Ibat: %d mA\r\n", intPart, fracPart, current_mA);
+//           HAL_UART_Transmit(&huart2, (uint8_t *)uartBuffer, strlen(uartBuffer), HAL_MAX_DELAY);
+//
+//           HAL_Delay(1000); // Delay 1 giây
    }
 
 
@@ -510,21 +601,6 @@ static int CompareData(const uint8_t *received_data, const uint8_t *valid_data)
     return status;
 }
 
-/**
- * Callback
- */
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-    if (GPIO_Pin == B1_Pin)
-    { // Nút nhấn B1
-        mButton_Rfid_Pressed != mButton_Rfid_Pressed; // Cờ trạng thái nút nhấn B1
-    }
-    else if (GPIO_Pin == B2_Pin)
-    { // Nút nhấn B2
-    	mStatus_Button_Sos != mStatus_Button_Sos;
-    	mTemp_cnt++;
-//        mButton_Sos_Pressed = 1; // Cờ trạng thái nút nhấn B2
-    }
-}
 
 /* USER CODE END 4 */
 

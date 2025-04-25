@@ -25,6 +25,9 @@
 #include "INA219.h"
 #include <stdio.h>  // �?ể sử dụng snprintf
 #include <string.h> // �?ể sử dụng strlen
+#include "bitmaps.h"
+#include "processing_handle.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,11 +59,11 @@ const uint8_t mValid_Uid[14] = {0x02, 0x31, 0x31, 0x30, 0x30, 0x33, 0x41, 0x34, 
 uint8_t mButton_Sos_Pressed = 0; // status button SOS
 uint8_t mButton_Rfid_Pressed = 0; // Status button On/Off power read RFID
 uint8_t mRfidBuffer[14];               // Bộ đệm nhận dữ liệu từ module RFID
-float 	mVotage_Value = 0.0;
-int16_t mCurrent_Value = 0;
-uint8_t mStatus_Button_Sos = 0; // default
+uint16_t mVotage_Value = 0;
+uint16_t mCurrent_Value = 0;
+uint8_t mBattery_percent = 0;
+uint8_t mCharging_status = 0; // default 0 is not charging
 
-uint8_t mTemp_cnt = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -79,31 +82,12 @@ static void BATERRY_CHARGER_PROCESS(void);
 
 static int CompareData(const uint8_t *received_data, const uint8_t *valid_data);
 
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-/**
- * Callback
- */
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-	UNUSED(GPIO_Pin);
-	mTemp_cnt++;
-    if (GPIO_Pin == B1_Pin)
-    { // Nút nhấn B1
-        mButton_Rfid_Pressed != mButton_Rfid_Pressed; // Cờ trạng thái nút nhấn B1
-    }
-    else if (GPIO_Pin == B2_Pin)
-    { // Nút nhấn B2
-//    	mStatus_Button_Sos != mStatus_Button_Sos;
-//    	mTemp_cnt++;
-//        mButton_Sos_Pressed = 1; // Cờ trạng thái nút nhấn B2
-    }
-    else
-    {
-//    	_NOP();
-    }
-}
+
 
 /* USER CODE END 0 */
 
@@ -153,86 +137,18 @@ int main(void)
    SH1106_Init();
    HAL_Delay(100);
    SH1106_Fill(SH1106_COLOR_BLACK);
-//   SH1106_GotoXY(30, 25);
-//   SH1106_Puts("OnTrak", &Font_11x18, SH1106_COLOR_WHITE);
+
+   SH1106_DrawBitmap(45, 0, (char*)bmp_logo_ontrak.data,bmp_logo_ontrak.width, bmp_logo_ontrak.height, SH1106_COLOR_WHITE);
+
    SH1106_UpdateScreen();
-//   HAL_Delay(2000);
+   HAL_Delay(2000);
 
    while (1) {
 	   BATERRY_CHARGER_PROCESS();
 	   DISPLAY_PROCESS();
-//	   SOS_PROCESS();
-//	   RFID_PROCESS();
+	   SOS_PROCESS();
+	   RFID_PROCESS();
 
-	   // Kiểm tra nút B1
-	   if (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) { // Kiểm tra nếu nút B1 được nhấn
-		   HAL_Delay(50); // Chống dội nút (Debounce)
-		   if (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) { // Xác nhận nút vẫn được nhấn
-			   static uint8_t led_b1_state = 0; // Trạng thái LED cho nút B1
-			   led_b1_state = !led_b1_state; // Đảo trạng thái LED
-			   HAL_GPIO_WritePin(GPIOC, COI_Pin, led_b1_state ? GPIO_PIN_SET : GPIO_PIN_RESET); // Điều khiển LED
-
-			   // Hiển thị trạng thái B1 lên OLED
-			   SH1106_GotoXY(5, 40); // Dòng thứ ba
-			   if (led_b1_state) {
-				   SH1106_Puts("SOS: ON", &Font_7x10, SH1106_COLOR_WHITE);
-			   } else {
-				   SH1106_Puts("SOS: OFF", &Font_7x10, SH1106_COLOR_WHITE);
-			   }
-//                   SH1106_UpdateScreen();
-
-			   // Chờ thả nút
-			   while (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET);
-		   }
-	   }
-
-	   // Quét RFID liên tục
-	   if (HAL_UART_Receive(&huart1, mRfidBuffer, 14, 100) == HAL_OK) { // Nhận dữ liệu RFID
-			  if (CompareData(mRfidBuffer, mValid_Uid)) {
-					HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); // Bật LED
-					SH1106_GotoXY(5, 30); // Cập nhật dòng 3
-					SH1106_Puts("charger", &Font_7x10, SH1106_COLOR_WHITE);
-//         	            SH1106_UpdateScreen();
-			  }
-			  else
-			  {
-				 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET); // Tắt LED
-			}
-			   HAL_Delay(10);
-		  }
-
-	   // Kiểm tra nút B2 để bật/tắt nguồn RFID
-	   if (HAL_GPIO_ReadPin(B2_GPIO_Port, B2_Pin) == GPIO_PIN_RESET) { // Kiểm tra nếu nút B2 được nhấn
-		   HAL_Delay(50); // Chống dội nút (Debounce)
-		   if (HAL_GPIO_ReadPin(B2_GPIO_Port, B2_Pin) == GPIO_PIN_RESET) { // Xác nhận nút vẫn được nhấn
-			   static uint8_t rdm6300_state = 0; // Trạng thái nguồn RFID
-			   rdm6300_state = !rdm6300_state; // Đảo trạng thái nguồn
-			   HAL_GPIO_WritePin(GPIOC, RDM6300_Pin, rdm6300_state ? GPIO_PIN_SET : GPIO_PIN_RESET); // Điều khiển nguồn RFID
-
-			   // Hiển thị trạng thái bật/tắt nguồn RFID trên OLED
-			   SH1106_GotoXY(5, 30); // Dòng thứ ba
-			   if (rdm6300_state) {
-				   SH1106_Puts("RFID ON", &Font_7x10, SH1106_COLOR_WHITE);
-			   } else {
-				   SH1106_Puts("RFID OFF", &Font_7x10, SH1106_COLOR_WHITE);
-//                       is_charger_displayed = 0; // Xóa trạng thái hiển thị khi tắt nguồn RFID
-			   }
-//                   SH1106_UpdateScreen();
-
-			   // Chờ thả nút
-			   while (HAL_GPIO_ReadPin(B2_GPIO_Port, B2_Pin) == GPIO_PIN_RESET);
-		   }
-	   }
-
-	   // Cập nhật OLED
-	   SH1106_UpdateScreen();
-
-	   // Truyền dữ liệu qua UART để debug
-//           char uartBuffer[100];
-//           snprintf(uartBuffer, sizeof(uartBuffer), "Vbat: %d.%03d V, Ibat: %d mA\r\n", intPart, fracPart, current_mA);
-//           HAL_UART_Transmit(&huart2, (uint8_t *)uartBuffer, strlen(uartBuffer), HAL_MAX_DELAY);
-//
-//           HAL_Delay(1000); // Delay 1 giây
    }
 
 
@@ -456,7 +372,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pins : B1_Pin B2_Pin */
   GPIO_InitStruct.Pin = B1_Pin|B2_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
@@ -472,30 +388,84 @@ static void MX_GPIO_Init(void)
  */
 static void DISPLAY_PROCESS(void)
 {
+   static refresh_display_time = 0;
    char vbatBuffer[16];
    char ibatBuffer[16];
-   char tempcnt[16];
+   char perceent_batBuffer[16];
 
-   snprintf(vbatBuffer, sizeof(vbatBuffer), "VBat: %0.3f V", mVotage_Value); // Hiển thị vbat
+
+   snprintf(vbatBuffer, sizeof(vbatBuffer), "VBat: %0.3f", mVotage_Value/1000.0); // Hiển thị vbat
    snprintf(ibatBuffer, sizeof(ibatBuffer), "IBat: %d mA", mCurrent_Value);            // Hiển thị ibat
-   snprintf(tempcnt, sizeof(tempcnt), "Cnt: %d ", mTemp_cnt);
+   snprintf(perceent_batBuffer, sizeof(perceent_batBuffer), "%d%%", mBattery_percent);
 
    SH1106_Fill(SH1106_COLOR_BLACK);
-   SH1106_GotoXY(5, 0); // the first line
-   SH1106_Puts(vbatBuffer, &Font_7x10, SH1106_COLOR_WHITE);
-   SH1106_GotoXY(5, 10); // the second line
-   SH1106_Puts(ibatBuffer, &Font_7x10, SH1106_COLOR_WHITE);
-   SH1106_GotoXY(5, 20); // the third line
-   SH1106_Puts(tempcnt, &Font_7x10, SH1106_COLOR_WHITE);
-//   if (mStatus_Button_Sos)
-//   {
-//	   SH1106_Puts("SOS: ON", &Font_7x10, SH1106_COLOR_WHITE);
-//   } else {
-//	   SH1106_Puts("SOS: OFF", &Font_7x10, SH1106_COLOR_WHITE);
-//   }
+   uint8_t x = 96;
+   uint8_t y = 0;
+   uint8_t bat_width = bmp_bat_0_percent.width;
+   uint8_t bat_height = bmp_bat_0_percent.height;
+   if((HAL_GetTick() - refresh_display_time) >= 100)
+	{
 
-   SH1106_UpdateScreen();
-   HAL_Delay(100);
+	   refresh_display_time = HAL_GetTick();
+
+	   if(mBattery_percent < 20)
+	   {
+		   SH1106_DrawBitmap(x, y, (char*)bmp_bat_0_percent.data,bat_width, bat_height, SH1106_COLOR_WHITE); // 0 - 20%
+	   }
+	   else if(mBattery_percent < 40)
+	   {
+		   SH1106_DrawBitmap(x, y, (char*)bmp_bat_30_percent.data,bat_width, bat_height, SH1106_COLOR_WHITE); // 20 - 40%
+	   }
+	   else if(mBattery_percent < 70)
+	   {
+		   SH1106_DrawBitmap(x, y, (char*)bmp_bat_50_percent.data,bat_width, bat_height, SH1106_COLOR_WHITE); // 40 - 70%
+	   }
+	   else if(mBattery_percent < 90)
+	   {
+		   SH1106_DrawBitmap(x, y, (char*)bmp_bat_80_percent.data,bat_width, bat_height, SH1106_COLOR_WHITE); // 70 - 90%
+	   }
+	   else
+	   {
+		   SH1106_DrawBitmap(x, y, (char*)bmp_bat_100_percent.data,bat_width, bat_height, SH1106_COLOR_WHITE);  // 90 - 100%
+	   }
+
+//	   Display Charging status
+	   if(mCharging_status)
+	   {
+		   SH1106_DrawBitmap(60, 0, (char*)bmp_bat_charging.data,bmp_bat_charging.width, bmp_bat_charging.height, SH1106_COLOR_WHITE);
+	   }
+
+//	   SH1106_GotoXY(5, 0); // the first line
+//	   SH1106_Puts(vbatBuffer, &Font_7x10, SH1106_COLOR_WHITE);
+	   SH1106_GotoXY(70, 4); // the first line
+	   SH1106_Puts(perceent_batBuffer, &Font_7x10, SH1106_COLOR_WHITE);
+
+	   SH1106_GotoXY(5, 20); // the second line
+	   if (mButton_Sos_Pressed)
+	   {
+		   SH1106_Puts("SOS: ON", &Font_7x10, SH1106_COLOR_WHITE);
+	   } else {
+		   SH1106_Puts("SOS: OFF", &Font_7x10, SH1106_COLOR_WHITE);
+	   }
+
+	   SH1106_GotoXY(5, 30); // the third line
+	   if(mButton_Rfid_Pressed)
+	   {
+		   SH1106_Puts("RFID: ON", &Font_7x10, SH1106_COLOR_WHITE);
+		   if(mCharging_status)
+		   {
+			   SH1106_GotoXY(5, 40); // the third line
+			   SH1106_Puts("Battery Charging", &Font_7x10, SH1106_COLOR_WHITE);
+		   }
+	   }
+	   else
+	   {
+		   SH1106_Puts("RFID: OFF", &Font_7x10, SH1106_COLOR_WHITE);
+		   mCharging_status = 0;
+	   }
+
+	   SH1106_UpdateScreen();
+	}
 }
 
 /**
@@ -503,43 +473,30 @@ static void DISPLAY_PROCESS(void)
  */
 static void RFID_PROCESS(void)
 {
-	// Quét RFID liên tục
-		   if (HAL_UART_Receive(&huart1, mRfidBuffer, 14, 100) == HAL_OK) { // Nhận dữ liệu RFID
-				  if (CompareData(mRfidBuffer, mValid_Uid)) {
-						HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); // Bật LED
-						SH1106_GotoXY(5, 30); // Cập nhật dòng 3
-						SH1106_Puts("charger", &Font_7x10, SH1106_COLOR_WHITE);
-	//         	            SH1106_UpdateScreen();
-				  }
-				  else
-				  {
-					 HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET); // Tắt LED
-				}
-				   HAL_Delay(10);
-			  }
+	static rfid_time_last = 0;
+ if(mButton_Rfid_Pressed)
+ {
+	 RFID_CONTROL(TURN_ON);
 
-		   // Kiểm tra nút B2 để bật/tắt nguồn RFID
-		   if (HAL_GPIO_ReadPin(B2_GPIO_Port, B2_Pin) == GPIO_PIN_RESET) { // Kiểm tra nếu nút B2 được nhấn
-			   HAL_Delay(50); // Chống dội nút (Debounce)
-			   if (HAL_GPIO_ReadPin(B2_GPIO_Port, B2_Pin) == GPIO_PIN_RESET) { // Xác nhận nút vẫn được nhấn
-				   static uint8_t rdm6300_state = 0; // Trạng thái nguồn RFID
-				   rdm6300_state = !rdm6300_state; // Đảo trạng thái nguồn
-				   HAL_GPIO_WritePin(GPIOC, RDM6300_Pin, rdm6300_state ? GPIO_PIN_SET : GPIO_PIN_RESET); // Điều khiển nguồn RFID
+	 if((HAL_GetTick() - rfid_time_last ) > 100)
+	{
+		 rfid_time_last = HAL_GetTick();
+		 HAL_UART_Receive(&huart1, mRfidBuffer, 14, 100);
+		 if(CompareData(mRfidBuffer, mValid_Uid))
+		 {
+			 mCharging_status = 1;
 
-				   // Hiển thị trạng thái bật/tắt nguồn RFID trên OLED
-				   SH1106_GotoXY(5, 30); // Dòng thứ ba
-				   if (rdm6300_state) {
-					   SH1106_Puts("RFID ON", &Font_7x10, SH1106_COLOR_WHITE);
-				   } else {
-					   SH1106_Puts("RFID OFF", &Font_7x10, SH1106_COLOR_WHITE);
-	//                       is_charger_displayed = 0; // Xóa trạng thái hiển thị khi tắt nguồn RFID
-				   }
-	//                   SH1106_UpdateScreen();
-
-				   // Chờ thả nút
-				   while (HAL_GPIO_ReadPin(B2_GPIO_Port, B2_Pin) == GPIO_PIN_RESET);
-			   }
-		   }
+		 }
+		 else
+		 {
+			 mCharging_status = 0;
+		 }
+	}
+ }
+ else
+ {
+	 RFID_CONTROL(TURN_OFF);
+ }
 }
 
 /**
@@ -547,26 +504,14 @@ static void RFID_PROCESS(void)
  */
 static void SOS_PROCESS(void)
 {
-////   // Kiểm tra nút B1
-//   if (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) { // Kiểm tra nếu nút B1 được nhấn
-//	   HAL_Delay(50); // Chống dội nút (Debounce)
-//	   if (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET) { // Xác nhận nút vẫn được nhấn
-//		   static uint8_t led_b1_state = 0; // Trạng thái LED cho nút B1
-//		   led_b1_state = !led_b1_state; // Đảo trạng thái LED
-//		   HAL_GPIO_WritePin(GPIOC, COI_Pin, led_b1_state ? GPIO_PIN_SET : GPIO_PIN_RESET); // Điều khiển LED
-//
-//		   // Hiển thị trạng thái B1 lên OLED
-//		   SH1106_GotoXY(5, 40); // Dòng thứ ba
-//		   if (led_b1_state) {
-//			   SH1106_Puts("SOS: ON", &Font_7x10, SH1106_COLOR_WHITE);
-//		   } else {
-//			   SH1106_Puts("SOS: OFF", &Font_7x10, SH1106_COLOR_WHITE);
-//		   }
-//
-//		   // Chờ thả nút
-//		   while (HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET);
-//	   }
-//   }
+	if(mButton_Sos_Pressed)
+	{
+		BUZZER_CONTROL(TURN_ON);
+	}
+	else
+	{
+		BUZZER_CONTROL(TURN_OFF);
+	}
 }
 
 /**
@@ -574,14 +519,29 @@ static void SOS_PROCESS(void)
  */
 static void BATERRY_CHARGER_PROCESS(void)
 {
-	// Đọc giá trị từ INA219
    uint16_t vbus_mV = INA219_ReadBusVoltage(&ina219); // Đọc Vbus (mV)
-   mCurrent_Value = INA219_ReadCurrent(&ina219); // Đọc dòng điện (mA)
+   uint16_t icurrent_mV = INA219_ReadCurrent(&ina219); // Đọc dòng điện (mA)
 
-   // Chia tách phần nguyên và phần thập phân
-   mVotage_Value = vbus_mV / 1000.0;          // Phần nguyên của Vbat
-//   mCurrent_Value = current_mA / 1000;         // Phần thập phân của Vbat
+   mVotage_Value = vbus_mV;
+   mCurrent_Value = icurrent_mV;
+   float tmp = mVotage_Value/BATTERY_FULL;
+   mBattery_percent = tmp * 100;
 
+   if(mCharging_status)
+   {
+	   if((mVotage_Value) >= BATTERY_FULL)
+	   {
+		   // charging stop
+	   }
+	   else
+	   {
+		   // charging start
+	   }
+   }
+   else
+   {
+	   // charging stop
+   }
 }
 
 /**
@@ -601,6 +561,26 @@ static int CompareData(const uint8_t *received_data, const uint8_t *valid_data)
     return status;
 }
 
+/**
+ * Callback
+ */
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+	UNUSED(GPIO_Pin);
+    if (GPIO_Pin == B1_Pin)
+    { // Nút nhấn B1
+    	__HAL_GPIO_EXTI_CLEAR_IT(B1_Pin);
+    	mButton_Sos_Pressed ^= 1;
+    }
+    else if (GPIO_Pin == B2_Pin)
+    { // Nút nhấn B2
+    	__HAL_GPIO_EXTI_CLEAR_IT(B2_Pin);
+    	mButton_Rfid_Pressed ^= 1;
+    }
+    else
+    {
+//    	_NOP();
+    }
+}
 
 /* USER CODE END 4 */
 

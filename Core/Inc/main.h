@@ -78,8 +78,12 @@ void Error_Handler(void);
 #define SWO_Pin GPIO_PIN_3
 #define SWO_GPIO_Port GPIOB
 
-/* USER CODE BEGIN Private defines */
 
+/* USER CODE BEGIN Private defines */
+#define TURN_ON GPIO_PIN_SET
+#define TURN_OFF GPIO_PIN_RESET
+#define BUZZER_CONTROL(x) HAL_GPIO_WritePin(COI_GPIO_Port, COI_Pin, x)
+#define RFID_CONTROL(x) HAL_GPIO_WritePin(RDM6300_GPIO_Port, RDM6300_Pin, x)
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

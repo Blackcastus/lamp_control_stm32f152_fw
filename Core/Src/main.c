@@ -54,7 +54,7 @@ UART_HandleTypeDef huart2;
 INA219_t ina219;
 /* USER CODE BEGIN PV */
 
-const uint8_t mValid_Uid[14] = {0x02, 0x31, 0x31, 0x30, 0x30, 0x33, 0x41, 0x34, 0x31, 0x33, 0x45, 0x35, 0x34, 0x03};
+uint8_t mValid_Uid[14] = {0x02, 0x31, 0x31, 0x30, 0x30, 0x33, 0x41, 0x34, 0x31, 0x33, 0x45, 0x35, 0x34, 0x03};
 
 uint8_t mButton_Sos_Pressed = 0; // status button SOS
 uint8_t mButton_Rfid_Pressed = 0; // Status button On/Off power read RFID
@@ -64,6 +64,9 @@ uint16_t mCurrent_Value = 0;
 uint8_t mBattery_percent = 0;
 uint8_t mCharging_status = 0; // default 0 is not charging
 
+uint32_t mPress_Tick = 0;
+uint8_t mStatus_Rfid_power = 0;
+uint8_t mStatus_Rfid_Chage_UID = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -439,31 +442,44 @@ static void DISPLAY_PROCESS(void)
 //	   SH1106_Puts(vbatBuffer, &Font_7x10, SH1106_COLOR_WHITE);
 	   SH1106_GotoXY(70, 4); // the first line
 	   SH1106_Puts(perceent_batBuffer, &Font_7x10, SH1106_COLOR_WHITE);
-
-	   SH1106_GotoXY(5, 20); // the second line
-	   if (mButton_Sos_Pressed)
+	   if(!mStatus_Rfid_Chage_UID)
 	   {
-		   SH1106_Puts("SOS: ON", &Font_7x10, SH1106_COLOR_WHITE);
-	   } else {
-		   SH1106_Puts("SOS: OFF", &Font_7x10, SH1106_COLOR_WHITE);
-	   }
-
-	   SH1106_GotoXY(5, 30); // the third line
-	   if(mButton_Rfid_Pressed)
-	   {
-		   SH1106_Puts("RFID: ON", &Font_7x10, SH1106_COLOR_WHITE);
-		   if(mCharging_status)
+		   SH1106_GotoXY(5, 20); // the second line
+		   if (mButton_Sos_Pressed)
 		   {
-			   SH1106_GotoXY(5, 40); // the third line
-			   SH1106_Puts("Battery Charging", &Font_7x10, SH1106_COLOR_WHITE);
+			   SH1106_Puts("SOS: ON", &Font_7x10, SH1106_COLOR_WHITE);
+		   } else {
+			   SH1106_Puts("SOS: OFF", &Font_7x10, SH1106_COLOR_WHITE);
+		   }
+
+		   SH1106_GotoXY(5, 30); // the third line
+		   if(mStatus_Rfid_power)
+		   {
+			   SH1106_Puts("RFID: ON", &Font_7x10, SH1106_COLOR_WHITE);
+			   if(mCharging_status)
+			   {
+				   SH1106_GotoXY(5, 40); // the third line
+				   SH1106_Puts("Battery Charging", &Font_7x10, SH1106_COLOR_WHITE);
+			   }
+		   }
+		   else
+		   {
+			   SH1106_Puts("RFID: OFF", &Font_7x10, SH1106_COLOR_WHITE);
+			   mCharging_status = 0;
 		   }
 	   }
 	   else
 	   {
-		   SH1106_Puts("RFID: OFF", &Font_7x10, SH1106_COLOR_WHITE);
-		   mCharging_status = 0;
+		   char uid[20];
+		   snprintf(uid, sizeof(uid), "UID: %d%d%d%d%d%d%d%d%d%d%d%d%d%d%",
+				   mValid_Uid[0], mValid_Uid[1], mValid_Uid[2], mValid_Uid[3],
+				   mValid_Uid[4], mValid_Uid[5], mValid_Uid[6], mValid_Uid[7],
+				   mValid_Uid[8], mValid_Uid[9], mValid_Uid[10], mValid_Uid[11],
+				   mValid_Uid[12], mValid_Uid[13]
+		   );
+		   SH1106_GotoXY(5, 20);
+		   SH1106_Puts(uid, &Font_7x10, SH1106_COLOR_WHITE);
 	   }
-
 	   SH1106_UpdateScreen();
 	}
 }
@@ -474,7 +490,7 @@ static void DISPLAY_PROCESS(void)
 static void RFID_PROCESS(void)
 {
 	static rfid_time_last = 0;
- if(mButton_Rfid_Pressed)
+ if(mStatus_Rfid_power)
  {
 	 RFID_CONTROL(TURN_ON);
 
@@ -573,8 +589,25 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
     }
     else if (GPIO_Pin == B2_Pin)
     { // Nút nhấn B2
-    	__HAL_GPIO_EXTI_CLEAR_IT(B2_Pin);
-    	mButton_Rfid_Pressed ^= 1;
+//    	__HAL_GPIO_EXTI_CLEAR_IT(B2_Pin);
+//    	mButton_Rfid_Pressed ^= 1;
+    	if(HAL_GPIO_ReadPin(B2_GPIO_Port, B2_Pin))
+    	{
+        	mButton_Rfid_Pressed = 1;
+        	mPress_Tick = HAL_GetTick();
+    	}
+    	else if(mButton_Rfid_Pressed)
+    	{
+    		if((HAL_GetTick() - mPress_Tick) >= 5000)
+    		{
+    			mStatus_Rfid_Chage_UID = 1;
+    		}
+    		else
+    		{
+    			mStatus_Rfid_power ^= 1;
+    		}
+    	}
+
     }
     else
     {

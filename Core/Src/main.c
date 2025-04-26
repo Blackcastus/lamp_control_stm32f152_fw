@@ -512,6 +512,7 @@ static void RFID_PROCESS(void)
  else
  {
 	 RFID_CONTROL(TURN_OFF);
+	 mStatus_Rfid_Chage_UID = 0;
  }
 }
 
@@ -584,21 +585,16 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	UNUSED(GPIO_Pin);
     if (GPIO_Pin == B1_Pin)
     { // Nút nhấn B1
-    	__HAL_GPIO_EXTI_CLEAR_IT(B1_Pin);
-    	mButton_Sos_Pressed ^= 1;
-    }
-    else if (GPIO_Pin == B2_Pin)
-    { // Nút nhấn B2
-//    	__HAL_GPIO_EXTI_CLEAR_IT(B2_Pin);
-//    	mButton_Rfid_Pressed ^= 1;
-    	if(HAL_GPIO_ReadPin(B2_GPIO_Port, B2_Pin))
+//    	__HAL_GPIO_EXTI_CLEAR_IT(B1_Pin);
+//    	mButton_Sos_Pressed ^= 1;
+    	if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET)
     	{
         	mButton_Rfid_Pressed = 1;
         	mPress_Tick = HAL_GetTick();
     	}
-    	else if(mButton_Rfid_Pressed)
+    	if(mButton_Rfid_Pressed)
     	{
-    		if((HAL_GetTick() - mPress_Tick) >= 5000)
+    		if((HAL_GetTick() - mPress_Tick) >= 3000)
     		{
     			mStatus_Rfid_Chage_UID = 1;
     		}
@@ -607,6 +603,27 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
     			mStatus_Rfid_power ^= 1;
     		}
     	}
+    }
+    else if (GPIO_Pin == B2_Pin)
+    { // Nút nhấn B2
+//    	__HAL_GPIO_EXTI_CLEAR_IT(B2_Pin);
+//    	mButton_Rfid_Pressed ^= 1;
+//    	if(HAL_GPIO_ReadPin(B2_GPIO_Port, B2_Pin))
+//    	{
+//        	mButton_Rfid_Pressed = 1;
+//        	mPress_Tick = HAL_GetTick();
+//    	}
+//    	if(mButton_Rfid_Pressed)
+//    	{
+//    		if((HAL_GetTick() - mPress_Tick) >= 5000)
+//    		{
+//    			mStatus_Rfid_Chage_UID = 1;
+//    		}
+//    		else
+//    		{
+//    			mStatus_Rfid_power ^= 1;
+//    		}
+//    	}
 
     }
     else

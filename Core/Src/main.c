@@ -51,13 +51,15 @@ I2C_HandleTypeDef hi2c2;
 
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
-INA219_t ina219;
+
 /* USER CODE BEGIN PV */
+INA219_t ina219;
 
-uint8_t mValid_Uid[14] = {0x02, 0x31, 0x31, 0x30, 0x30, 0x33, 0x41, 0x34, 0x31, 0x33, 0x45, 0x35, 0x34, 0x03};
-
+//uint8_t mValid_Uid[14] = {0x02, 0x31, 0x31, 0x30, 0x30, 0x33, 0x41, 0x34, 0x31, 0x33, 0x45, 0x35, 0x34, 0x03};
+uint8_t mValid_Uid[14] = {0x03, 0x02, 0x30, 0x43, 0x30, 0x30, 0x31, 0x45, 0x42, 0x30, 0x31, 0x32, 0x42, 0x30};
+char 	mUser_Name[] = "PHAM DUC HIEN";
 uint8_t mButton_Sos_Pressed = 0; // status button SOS
-uint8_t mButton_Rfid_Pressed = 0; // Status button On/Off power read RFID
+uint8_t mRfid_Uid_Correct = 0; // Status button On/Off power read RFID
 uint8_t mRfidBuffer[14];               // Bộ đệm nhận dữ liệu từ module RFID
 uint16_t mVotage_Value = 0;
 uint16_t mCurrent_Value = 0;
@@ -67,6 +69,7 @@ uint8_t mCharging_status = 0; // default 0 is not charging
 uint32_t mPress_Tick = 0;
 uint8_t mStatus_Rfid_power = 0;
 uint8_t mStatus_Rfid_Chage_UID = 0;
+uint32_t mPress_time = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -131,31 +134,27 @@ int main(void)
   if (!INA219_Init(&ina219, &hi2c2, INA219_ADDRESS)) {
 	 while (1);
  }
+  SH1106_Init();
+  HAL_Delay(100);
+  SH1106_Fill(SH1106_COLOR_BLACK);
+  SH1106_DrawBitmap(45, 0, (char*)bmp_logo_40x64_ontrak.data,bmp_logo_40x64_ontrak.width, bmp_logo_40x64_ontrak.height, SH1106_COLOR_WHITE);
+  SH1106_UpdateScreen();
+  HAL_Delay(2000);
 
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+    /* USER CODE END WHILE */
 
-   SH1106_Init();
-   HAL_Delay(100);
-   SH1106_Fill(SH1106_COLOR_BLACK);
-
-   SH1106_DrawBitmap(45, 0, (char*)bmp_logo_ontrak.data,bmp_logo_ontrak.width, bmp_logo_ontrak.height, SH1106_COLOR_WHITE);
-
-   SH1106_UpdateScreen();
-   HAL_Delay(2000);
-
-   while (1) {
-	   BATERRY_CHARGER_PROCESS();
-	   DISPLAY_PROCESS();
-	   SOS_PROCESS();
-	   RFID_PROCESS();
-
-   }
-
-
-
+    /* USER CODE BEGIN 3 */
+	  BATERRY_CHARGER_PROCESS();
+	  DISPLAY_PROCESS();
+	  SOS_PROCESS();
+	  RFID_PROCESS();
+  }
   /* USER CODE END 3 */
 }
 
@@ -357,7 +356,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, COI_Pin|RDM6300_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, CHARGING_Pin|LED_SOS_Pin|COI_Pin|RDM6300_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : LD2_Pin */
   GPIO_InitStruct.Pin = LD2_Pin;
@@ -366,8 +365,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : COI_Pin RDM6300_Pin */
-  GPIO_InitStruct.Pin = COI_Pin|RDM6300_Pin;
+  /*Configure GPIO pins : CHARGING_Pin LED_SOS_Pin COI_Pin RDM6300_Pin */
+  GPIO_InitStruct.Pin = CHARGING_Pin|LED_SOS_Pin|COI_Pin|RDM6300_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -378,8 +377,17 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : INPUT_WIRELESS_Pin */
+  GPIO_InitStruct.Pin = INPUT_WIRELESS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(INPUT_WIRELESS_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
 }
@@ -410,7 +418,7 @@ static void DISPLAY_PROCESS(void)
 	{
 
 	   refresh_display_time = HAL_GetTick();
-
+//	   SH1106_DrawBitmap(5, 10, (char*)bmp_logo_19x30_ontrak.data,bmp_logo_19x30_ontrak.width, bmp_logo_19x30_ontrak.height, SH1106_COLOR_WHITE); // 0 - 20%
 	   if(mBattery_percent < 20)
 	   {
 		   SH1106_DrawBitmap(x, y, (char*)bmp_bat_0_percent.data,bat_width, bat_height, SH1106_COLOR_WHITE); // 0 - 20%
@@ -436,50 +444,51 @@ static void DISPLAY_PROCESS(void)
 	   if(mCharging_status)
 	   {
 		   SH1106_DrawBitmap(60, 0, (char*)bmp_bat_charging.data,bmp_bat_charging.width, bmp_bat_charging.height, SH1106_COLOR_WHITE);
+//		   SH1106_GotoXY(5, 30); // the third line
+//		   SH1106_Puts("Charging", &Font_7x10, SH1106_COLOR_WHITE);
 	   }
 
-//	   SH1106_GotoXY(5, 0); // the first line
-//	   SH1106_Puts(vbatBuffer, &Font_7x10, SH1106_COLOR_WHITE);
 	   SH1106_GotoXY(70, 4); // the first line
 	   SH1106_Puts(perceent_batBuffer, &Font_7x10, SH1106_COLOR_WHITE);
-	   if(!mStatus_Rfid_Chage_UID)
-	   {
-		   SH1106_GotoXY(5, 20); // the second line
-		   if (mButton_Sos_Pressed)
-		   {
-			   SH1106_Puts("SOS: ON", &Font_7x10, SH1106_COLOR_WHITE);
-		   } else {
-			   SH1106_Puts("SOS: OFF", &Font_7x10, SH1106_COLOR_WHITE);
-		   }
 
-		   SH1106_GotoXY(5, 30); // the third line
-		   if(mStatus_Rfid_power)
-		   {
-			   SH1106_Puts("RFID: ON", &Font_7x10, SH1106_COLOR_WHITE);
-			   if(mCharging_status)
-			   {
-				   SH1106_GotoXY(5, 40); // the third line
-				   SH1106_Puts("Battery Charging", &Font_7x10, SH1106_COLOR_WHITE);
-			   }
-		   }
-		   else
-		   {
-			   SH1106_Puts("RFID: OFF", &Font_7x10, SH1106_COLOR_WHITE);
-			   mCharging_status = 0;
-		   }
-	   }
-	   else
+	   SH1106_GotoXY(5, 20);
+	   SH1106_Puts("User:", &Font_7x10, SH1106_COLOR_WHITE);
+	   SH1106_GotoXY(20, 30);
+	   SH1106_Puts(mUser_Name, &Font_7x10, SH1106_COLOR_WHITE);
+
+	   if(mRfid_Uid_Correct)
 	   {
+		  // user name
+		  // id
 		   char uid[20];
-		   snprintf(uid, sizeof(uid), "UID: %d%d%d%d%d%d%d%d%d%d%d%d%d%d%",
+
+		   snprintf(uid, sizeof(uid), "ID:%d%d%d%d%d%d%d%d%d%d%d%d%d%d%",
 				   mValid_Uid[0], mValid_Uid[1], mValid_Uid[2], mValid_Uid[3],
 				   mValid_Uid[4], mValid_Uid[5], mValid_Uid[6], mValid_Uid[7],
 				   mValid_Uid[8], mValid_Uid[9], mValid_Uid[10], mValid_Uid[11],
-				   mValid_Uid[12], mValid_Uid[13]
-		   );
-		   SH1106_GotoXY(5, 20);
+				   mValid_Uid[12], mValid_Uid[13]);
+		   SH1106_GotoXY(5, 40);
 		   SH1106_Puts(uid, &Font_7x10, SH1106_COLOR_WHITE);
 	   }
+	   char uid[20];
+	   //		   char name[20];
+
+//	   snprintf(uid, sizeof(uid), "ID:%d%d%d%d%d%d%d%d%d%d%d%d%d%d%",
+//	   mRfidBuffer[0], mRfidBuffer[1], mRfidBuffer[2], mRfidBuffer[3],
+//	   mRfidBuffer[4], mRfidBuffer[5], mRfidBuffer[6], mRfidBuffer[7],
+//	   mRfidBuffer[8], mRfidBuffer[9], mRfidBuffer[10], mRfidBuffer[11],
+//	   mRfidBuffer[12], mRfidBuffer[13]);
+//	   SH1106_GotoXY(5, 40);
+//	   SH1106_Puts(uid, &Font_7x10, SH1106_COLOR_WHITE);
+	   SH1106_GotoXY(5, 50); // the second line
+	   if (mButton_Sos_Pressed)
+	   {
+		   SH1106_Puts("SOS: ON", &Font_7x10, SH1106_COLOR_WHITE);
+	   } else
+	   {
+//		   SH1106_Puts("SOS: OFF", &Font_7x10, SH1106_COLOR_WHITE);
+	   }
+
 	   SH1106_UpdateScreen();
 	}
 }
@@ -490,30 +499,37 @@ static void DISPLAY_PROCESS(void)
 static void RFID_PROCESS(void)
 {
 	static rfid_time_last = 0;
- if(mStatus_Rfid_power)
- {
-	 RFID_CONTROL(TURN_ON);
 
-	 if((HAL_GetTick() - rfid_time_last ) > 100)
-	{
-		 rfid_time_last = HAL_GetTick();
-		 HAL_UART_Receive(&huart1, mRfidBuffer, 14, 100);
-		 if(CompareData(mRfidBuffer, mValid_Uid))
-		 {
-			 mCharging_status = 1;
+	RFID_CONTROL(TURN_ON);
+	 if(!mStatus_Rfid_Chage_UID && !mCharging_status)
+	 {
+		 if((HAL_GetTick() - rfid_time_last ) > 500)
+		{
+			 rfid_time_last = HAL_GetTick();
+			 memset(mRfidBuffer, sizeof(mRfidBuffer), 0);
+			 if(HAL_UART_Receive(&huart1, mRfidBuffer, 14, 100) == HAL_OK)
+			 {
+				 if(CompareData(mRfidBuffer, mValid_Uid))
+				 {
+					 mRfid_Uid_Correct = 1;
 
-		 }
-		 else
-		 {
-			 mCharging_status = 0;
-		 }
-	}
- }
- else
- {
-	 RFID_CONTROL(TURN_OFF);
-	 mStatus_Rfid_Chage_UID = 0;
- }
+				 }
+				 else
+				 {
+					 mRfid_Uid_Correct = 0;
+//					 memset(mRfidBuffer, sizeof(mRfidBuffer), 0);
+				 }
+			 }
+			 else
+			 {
+//				 memset(mRfidBuffer, sizeof(mRfidBuffer), 0);
+			 }
+		}
+	 }
+	 else
+	 {
+
+	 }
 }
 
 /**
@@ -521,14 +537,36 @@ static void RFID_PROCESS(void)
  */
 static void SOS_PROCESS(void)
 {
+//	if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET)
+//	{
+//		HAL_Delay(100);
+//		mButton_Sos_Pressed ^= 1;
+//
+//	}
+	static uint32_t blink_led_times_last = 0;
+	static uint8_t led_stt = 0;
+
 	if(mButton_Sos_Pressed)
 	{
 		BUZZER_CONTROL(TURN_ON);
+		// blink led
+		if((HAL_GetTick() - blink_led_times_last) >= BLINK_LED_TIMES)
+		{
+			blink_led_times_last = HAL_GetTick();
+			led_stt ^= 1;
+			LED_SOS_CONTROL(led_stt? TURN_ON: TURN_OFF);
+		}
 	}
 	else
 	{
 		BUZZER_CONTROL(TURN_OFF);
+		LED_SOS_CONTROL(TURN_OFF);
 	}
+
+//	if (!IS_IRQ_ENABLED(EXTI15_10_IRQn))  // nếu EXTI15_10 bị disable
+//	{
+//	    HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);  // Bật lại ngắt
+//	}
 }
 
 /**
@@ -536,23 +574,39 @@ static void SOS_PROCESS(void)
  */
 static void BATERRY_CHARGER_PROCESS(void)
 {
-   uint16_t vbus_mV = INA219_ReadBusVoltage(&ina219); // Đọc Vbus (mV)
-   uint16_t icurrent_mV = INA219_ReadCurrent(&ina219); // Đọc dòng điện (mA)
+   uint16_t vbus_mV = INA219_ReadBusVoltage(&ina219); // �?�?c Vbus (mV)
+   uint16_t icurrent_mV = INA219_ReadCurrent(&ina219); // �?�?c dòng điện (mA)
 
    mVotage_Value = vbus_mV;
    mCurrent_Value = icurrent_mV;
    float tmp = mVotage_Value/BATTERY_FULL;
    mBattery_percent = tmp * 100;
 
-   if(mCharging_status)
+   mBattery_percent = mBattery_percent < 5? 0 : mBattery_percent;
+   if(mRfid_Uid_Correct)
    {
 	   if((mVotage_Value) >= BATTERY_FULL)
 	   {
 		   // charging stop
+//		   LED_SOS_CONTROL(TURN_OFF); // test check charging
+		   CHARGE_CONTROL(TURN_OFF);
+		   mCharging_status = 0;
 	   }
 	   else
 	   {
 		   // charging start
+		   // Check input wireless power
+		   if(HAL_GPIO_ReadPin(INPUT_WIRELESS_GPIO_Port, INPUT_WIRELESS_Pin) == GPIO_PIN_SET)
+		   {
+			   mCharging_status = 1;
+//			   LED_SOS_CONTROL(TURN_ON); // test check charging
+			   CHARGE_CONTROL(TURN_ON);
+		   }
+		   else
+		   {
+			   mCharging_status = 0;
+			   CHARGE_CONTROL(TURN_OFF);
+		   }
 	   }
    }
    else
@@ -585,24 +639,14 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
 	UNUSED(GPIO_Pin);
     if (GPIO_Pin == B1_Pin)
     { // Nút nhấn B1
-//    	__HAL_GPIO_EXTI_CLEAR_IT(B1_Pin);
-//    	mButton_Sos_Pressed ^= 1;
-    	if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET)
-    	{
-        	mButton_Rfid_Pressed = 1;
-        	mPress_Tick = HAL_GetTick();
-    	}
-    	if(mButton_Rfid_Pressed)
-    	{
-    		if((HAL_GetTick() - mPress_Tick) >= 3000)
-    		{
-    			mStatus_Rfid_Chage_UID = 1;
-    		}
-    		else
-    		{
-    			mStatus_Rfid_power ^= 1;
-    		}
-    	}
+//    	while((HAL_GetTick() - mPress_time) <= 50);
+		if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) != GPIO_PIN_RESET)
+		{
+			__HAL_GPIO_EXTI_CLEAR_IT(B1_Pin);
+			mButton_Sos_Pressed ^= 1;
+//			mPress_time = HAL_GetTick();
+		}
+
     }
     else if (GPIO_Pin == B2_Pin)
     { // Nút nhấn B2

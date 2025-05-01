@@ -36,6 +36,7 @@ extern const BITMAP bmp_bat_50_percent;
 extern const BITMAP bmp_bat_80_percent;
 extern const BITMAP bmp_bat_100_percent;
 extern const BITMAP bmp_bat_charging;
-extern const BITMAP bmp_logo_ontrak;
-
+extern const BITMAP bmp_logo_40x64_ontrak;
+extern const BITMAP bmp_logo_38x60_ontrak;
+extern const BITMAP bmp_logo_19x30_ontrak;
 #endif

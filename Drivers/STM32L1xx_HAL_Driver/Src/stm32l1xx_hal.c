@@ -295,7 +295,8 @@ __weak HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
   *      implementations in user file.
   * @retval None
   */
-__weak void HAL_IncTick(void){
+__weak void HAL_IncTick(void)
+{
   uwTick += uwTickFreq;
 }
 

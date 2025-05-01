@@ -198,7 +198,6 @@ void SysTick_Handler(void)
 /* please refer to the startup file (startup_stm32l1xx.s).                    */
 /******************************************************************************/
 
-/* USER CODE BEGIN 1 */
 /**
   * @brief This function handles EXTI line[15:10] interrupts.
   */
@@ -213,4 +212,7 @@ void EXTI15_10_IRQHandler(void)
 
   /* USER CODE END EXTI15_10_IRQn 1 */
 }
+
+/* USER CODE BEGIN 1 */
+
 /* USER CODE END 1 */
